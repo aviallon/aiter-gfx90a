@@ -8,6 +8,7 @@ import torch
 
 from aiter.ops.triton.attention.unified_attention import unified_attention
 from aiter.ops.triton.utils.types import e4m3_dtype
+from aiter.ops.triton.utils._triton import arch_info
 
 NUM_HEADS = [(4, 4), (16, 2)]
 HEAD_SIZES = [64, 128]
@@ -135,6 +136,8 @@ def test_triton_unified_attn(
     use_kv_descale: bool,
     use_out_scale: bool,
 ) -> None:
+    if (q_dtype.itemsize == 1 or kv_dtype.itemsize == 1) and not arch_info.is_fp8_avail():
+        pytest.skip("unified attention FP8 requires FP8 compute ISA")
 
     torch.manual_seed(0)
     num_seqs = len(seq_lens)

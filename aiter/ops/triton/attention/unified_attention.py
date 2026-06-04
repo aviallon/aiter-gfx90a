@@ -3,6 +3,7 @@
 import triton
 import torch
 from aiter.ops.triton.utils.device_info import get_num_sms
+from aiter.ops.triton.utils import types
 import math
 from aiter.ops.triton._triton_kernels.attention.unified_attention import (
     kernel_unified_attention_2d,
@@ -11,6 +12,32 @@ from aiter.ops.triton._triton_kernels.attention.unified_attention import (
 )
 
 from aiter.ops.triton._triton_kernels.flash_attn_triton_amd.utils import get_arch
+
+
+def _uses_fp8(*tensors):
+    return any(
+        tensor is not None
+        and tensor.dtype
+        in {
+            torch.float8_e4m3fnuz,
+            torch.float8_e4m3fn,
+            torch.float8_e5m2,
+            torch.float8_e5m2fnuz,
+        }
+        for tensor in tensors
+    )
+
+
+def _first_fp8_tensor(*tensors):
+    for tensor in tensors:
+        if tensor is not None and tensor.dtype in {
+            torch.float8_e4m3fnuz,
+            torch.float8_e4m3fn,
+            torch.float8_e5m2,
+            torch.float8_e5m2fnuz,
+        }:
+            return tensor
+    return None
 
 
 def select_2d_config(
@@ -135,6 +162,11 @@ def unified_attention(
     sinks=None,
 ):
     assert causal, "Only causal attention is supported"
+
+    if _uses_fp8(q, k, v, out):
+        # gfx90a can store/convert FP8 values, but has no FP8 matrix-compute
+        # ISA.  Failing here avoids a lower-level Triton compiler abort.
+        types._is_fp8(_first_fp8_tensor(q, k, v, out))
 
     if sinks is not None:
         assert sinks.shape[0] == q.shape[1], "Sinks must be num_query_heads size"
