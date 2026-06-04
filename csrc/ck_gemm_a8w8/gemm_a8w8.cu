@@ -181,6 +181,9 @@ torch::Tensor gemm_a8w8(
   }
   else
   {
+#ifdef AITER_GFX90A_BUILD
+    TORCH_CHECK(false, "FP8 A8W8 GEMM is not prebuilt for gfx90a");
+#else
     if (x_scale.dtype() == at::ScalarType::Float && Y.dtype() == at::ScalarType::Half)
     {
       rowwise_dispatch<F8, F32, F16>(M, N, K)(XQ, WQ, x_scale, w_scale, Y, bias, KBatch);
@@ -201,6 +204,7 @@ torch::Tensor gemm_a8w8(
     {
       TORCH_CHECK(false, "Unsupported scales/output dtype!");
     }
+#endif
   }
   return Y;
 }

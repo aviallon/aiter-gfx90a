@@ -416,8 +416,8 @@ parser.add_argument(
     "--activation",
     type=dtypes.str2ActivationType,
     choices=[
-        "silu",
-        "gelu",
+        ActivationType.Silu,
+        ActivationType.Gelu,
     ],
     default="silu",
     help="""Activation function.

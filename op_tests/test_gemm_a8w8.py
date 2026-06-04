@@ -8,6 +8,7 @@ import os
 import aiter
 from aiter import dtypes
 from aiter.jit.core import AITER_CONFIGS
+from aiter.jit.utils.build_targets import is_fp8_compute_available
 from aiter.ops.shuffle import shuffle_weight
 from aiter.test_common import checkAllclose, perftest, benchmark
 from aiter import hipb_mm, hipb_create_extension
@@ -337,6 +338,12 @@ def calculate_total_valid_points(cu_count, aligned_k):
 def test_normal_gemm_a8w8_pertoken_quant(
     l_dtype, l_quantDtype, l_mnk, pad_a=128, skip_ck=False
 ):
+    if not is_fp8_compute_available(get_gfx()):
+        l_quantDtype = [dtype for dtype in l_quantDtype if dtype != dtypes.fp8]
+        if not l_quantDtype:
+            aiter.logger.info("skip FP8 A8W8 test: %s has no FP8 compute ISA", get_gfx())
+            return None
+
     df = []
     for dtype in l_dtype:
         for quantDtype in l_quantDtype:
@@ -352,6 +359,10 @@ def test_normal_gemm_a8w8_pertoken_quant(
 
 
 def test_skinny_gemm_a8w8_pertoken_quant():
+    if not is_fp8_compute_available(get_gfx()):
+        aiter.logger.info("skip skinny FP8 A8W8 test: %s has no FP8 compute ISA", get_gfx())
+        return
+
     # seed = 8779
     # torch.manual_seed(seed)
     # torch.cuda.manual_seed(seed)

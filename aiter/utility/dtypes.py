@@ -7,6 +7,7 @@ from .aiter_types import aiter_dtypes, aiter_tensor_t
 import argparse
 
 defaultDtypes = {
+    "gfx90a": {"fp8": torch.float8_e4m3fnuz},
     "gfx942": {"fp8": torch.float8_e4m3fnuz},
     "gfx950": {"fp8": torch.float8_e4m3fn},
     "gfx1250": {"fp8": torch.float8_e4m3fn},

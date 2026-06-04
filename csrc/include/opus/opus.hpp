@@ -13,6 +13,8 @@
 #include <type_traits>
 #include <utility>
 
+#include "hip_float8_impl.h"
+
 #ifndef OPUS_ENABLE_RUNTIME_QUERY
 #define OPUS_ENABLE_RUNTIME_QUERY 0
 #endif
@@ -951,7 +953,7 @@ template<> struct numeric_limits<bf16_t> {
 // fp8 E4M3: gfx950=OCP(ieee-like, NaN=0x7F), gfx942=fnuz(NaN=0x80). No infinity in either format.
 // NOTE: __builtin_bit_cast with _BitInt(8) is not yet constexpr in clang, so use static_cast via signed char.
 template<> struct numeric_limits<fp8_t> {
-#if defined(__gfx942__)
+#if defined(__gfx90a__) || defined(__gfx942__)
     static constexpr unsigned char bin_min = 0x08, bin_max = 0x7F, bin_lowest = 0xFF, bin_qnan = 0x80, bin_inf = 0x00;
 #else
     static constexpr unsigned char bin_min = 0x08, bin_max = 0x7E, bin_lowest = 0xFE, bin_qnan = 0x7F, bin_inf = 0x00;
@@ -1049,7 +1051,7 @@ template<> struct finfo<bf16_t> {
 template<> struct finfo<fp8_t> {
     static constexpr int bits = 8;
     OPUS_H_D static constexpr float eps()  { return __builtin_bit_cast(float, 0x3E000000u); }  // 2^-3 = 0.125
-#if defined(__gfx942__)
+#if defined(__gfx90a__) || defined(__gfx942__)
     OPUS_H_D static constexpr float max()  { return __builtin_bit_cast(float, 0x43700000u); }  // 240.0
     OPUS_H_D static constexpr float min()  { return __builtin_bit_cast(float, 0xC3700000u); }  // -240.0
     OPUS_H_D static constexpr float tiny() { return __builtin_bit_cast(float, 0x3C000000u); }  // 2^-7 = 0.0078125
@@ -1122,12 +1124,22 @@ OPUS_D constexpr auto fp32_to_bf16(const fp32_t& x, number<rm> = {}) {
 // Template constexpr (packed variants, OPUS_CAST_DEFINE) survives because the check is deferred to instantiation.
 // TODO: we may remove constexpr from cast in the future
 OPUS_D auto fp32_to_fp8(const fp32_t& x) {
+#if defined(__gfx90a__)
+    auto w = hip_fp8_impl::to_float8<4, 3, float, true /*negative_zero_nan*/, true /*clip*/>(x);
+    return __builtin_bit_cast(fp8_t, static_cast<signed char>(w));
+#else
     int w; w = __builtin_amdgcn_cvt_pk_fp8_f32(x, 0.0f, w, /*sel=lo*/0);
     return __builtin_bit_cast(fp8_t, static_cast<signed char>(w));
+#endif
 }
 OPUS_D auto fp8_to_fp32(const fp8_t& x) {
+#if defined(__gfx90a__)
+    auto w = __builtin_bit_cast(unsigned char, x);
+    return hip_fp8_impl::from_float8<4, 3, float, true /*negative_zero_nan*/>(w);
+#else
     int w = static_cast<int>(__builtin_bit_cast(unsigned char, x));
     return __builtin_amdgcn_cvt_f32_fp8(w, /*byte=*/0);
+#endif
 }
 OPUS_D constexpr auto fp32_to_fp32(const fp32_t& x) { return x; }
 OPUS_D constexpr auto fp32_to_i8(const fp32_t& x) { return static_cast<i8_t>(x); }

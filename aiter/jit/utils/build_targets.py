@@ -37,9 +37,22 @@ GFX_MAP = {
 # explicitly alongside GPU_ARCHS to override the default here.
 # Extend this table when adding support for new GPU targets.
 GFX_CU_NUM_MAP = {
+    "gfx90a": 104,  # MI210 / MI250-class CDNA2; set CU_NUM for MI250X or partitioned GPUs
     "gfx942": 304,  # MI300X (SPX, full GPU); MI308X shares gfx942 — use CU_NUM override
     "gfx950": 256,  # MI350
 }
+
+FP8_COMPUTE_ARCHS = frozenset({"gfx942", "gfx950", "gfx1200", "gfx1201", "gfx1250"})
+
+
+def is_fp8_compute_available(gfx: str) -> bool:
+    """Return whether the target has FP8 compute instructions.
+
+    gfx90a can store/convert FP8 in some software paths, but it does not have
+    FP8 MFMA/WMMA instructions. Use this helper when selecting/building kernels
+    that perform FP8 matrix compute, not for generic FP8 dtype availability.
+    """
+    return gfx.split(":", 1)[0] in FP8_COMPUTE_ARCHS
 
 
 def _parse_gpu_archs_env(gfx_env: str) -> list[str]:

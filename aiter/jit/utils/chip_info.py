@@ -358,6 +358,8 @@ def get_device_name():
         if chip_id in MI308_CHIP_IDS:
             return "MI308"
         return "MI300"
+    elif gfx == "gfx90a":
+        return "MI200"
     elif gfx == "gfx950":
         return "MI350"
     else:

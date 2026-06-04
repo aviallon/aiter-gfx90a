@@ -162,6 +162,7 @@ def parse_csv(csv_path: str):
 
             job = {
                 "kernel_name": kernel_name,
+                "gfx": row.get("gfx", "").strip(),
                 "m": m,
                 "n": n,
                 "k": k,

@@ -23,6 +23,12 @@ Avg per call: 2.503 us
 """
 
 
+def _arch_config_candidates(dev: str) -> tuple[str, ...]:
+    if dev == "gfx90a":
+        return (dev, "gfx942")
+    return (dev,)
+
+
 def _load_config_file(
     cache_dict: dict,
     cache_key: str,
@@ -76,15 +82,23 @@ def _get_gemm_config_cached(
     if cache_key not in _get_gemm_config_cached._config_cache:
         _get_gemm_config_cached._config_cache[cache_key] = {}
 
-        # Load default config (must exist)
-        fpath = f"{AITER_TRITON_CONFIGS_PATH}/gemm/{dev}-{config_name}.json"
-        _load_config_file(
-            _get_gemm_config_cached._config_cache,
-            cache_key,
-            fpath,
-            "default",
-            fpath_should_exist=True,
-        )
+        # Load default config (must exist). gfx90a reuses the gfx942 Triton GEMM
+        # defaults when no arch-specific file exists; both are CDNA targets and
+        # this keeps lightweight validation paths working without duplicating
+        # every config file.
+        for arch in _arch_config_candidates(dev):
+            fpath = f"{AITER_TRITON_CONFIGS_PATH}/gemm/{arch}-{config_name}.json"
+            if _load_config_file(
+                _get_gemm_config_cached._config_cache,
+                cache_key,
+                fpath,
+                "default",
+                fpath_should_exist=False,
+            ):
+                break
+        else:
+            fpath = f"{AITER_TRITON_CONFIGS_PATH}/gemm/{dev}-{config_name}.json"
+            raise AssertionError(f"Required config file doesn't exist: {fpath}")
 
     config_dict_key = "default"
 
@@ -92,11 +106,13 @@ def _get_gemm_config_cached(
     if specialized_filename is not None:
         spec_key = specialized_filename
         if spec_key not in _get_gemm_config_cached._config_cache[cache_key]:
-            fpath = f"{AITER_TRITON_CONFIGS_PATH}/gemm/{dev}-{config_name}-{specialized_filename}.json"
-            if _load_config_file(
-                _get_gemm_config_cached._config_cache, cache_key, fpath, spec_key
-            ):
-                config_dict_key = spec_key
+            for arch in _arch_config_candidates(dev):
+                fpath = f"{AITER_TRITON_CONFIGS_PATH}/gemm/{arch}-{config_name}-{specialized_filename}.json"
+                if _load_config_file(
+                    _get_gemm_config_cached._config_cache, cache_key, fpath, spec_key
+                ):
+                    config_dict_key = spec_key
+                    break
         else:
             config_dict_key = spec_key
 
@@ -104,13 +120,13 @@ def _get_gemm_config_cached(
         nk_key = f"{N}_{K}"
         if nk_key not in _get_gemm_config_cached._config_cache[cache_key]:
             # load specialized config
-            fpath = (
-                f"{AITER_TRITON_CONFIGS_PATH}/gemm/{dev}-{config_name}-N={N}-K={K}.json"
-            )
-            if _load_config_file(
-                _get_gemm_config_cached._config_cache, cache_key, fpath, nk_key
-            ):
-                config_dict_key = nk_key
+            for arch in _arch_config_candidates(dev):
+                fpath = f"{AITER_TRITON_CONFIGS_PATH}/gemm/{arch}-{config_name}-N={N}-K={K}.json"
+                if _load_config_file(
+                    _get_gemm_config_cached._config_cache, cache_key, fpath, nk_key
+                ):
+                    config_dict_key = nk_key
+                    break
         else:
             config_dict_key = nk_key
 

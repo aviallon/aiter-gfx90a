@@ -25,6 +25,7 @@ import torch
 import torch.nn.functional as F
 from aiter import dtypes, gemm_a16w16_asm, hipb_create_extension, hipb_mm, logger
 from aiter.jit.core import AITER_CONFIGS, AITER_LOG_TUNED_CONFIG
+from aiter.jit.utils.build_targets import is_fp8_compute_available
 from aiter.jit.utils.chip_info import get_cu_num, get_gfx
 from aiter.jit.utils.torch_guard import torch_compile_guard
 from aiter.ops.flydsl.utils import is_flydsl_available
@@ -84,7 +85,8 @@ def is_skinny_default_shape(
         dtype = eval(dtype)
     cu_num = get_cu_num() if cu_num is None else cu_num
     return (
-        dtype in [dtypes.fp16, dtypes.bf16]
+        is_fp8_compute_available(get_gfx())
+        and dtype in [dtypes.fp16, dtypes.bf16]
         and K % 8 == 0
         and (
             (

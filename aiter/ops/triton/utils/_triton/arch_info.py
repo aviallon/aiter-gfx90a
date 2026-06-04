@@ -1,5 +1,7 @@
 import triton
 
+from aiter.jit.utils.build_targets import is_fp8_compute_available
+
 try:
     _CACHED_ARCH = triton.runtime.driver.active.get_current_target().arch
 except RuntimeError:
@@ -21,7 +23,7 @@ def is_fp4_avail():
 
 
 def is_fp8_avail():
-    return get_arch() in ("gfx942", "gfx950", "gfx1250", "gfx1200", "gfx1201")
+    return is_fp8_compute_available(get_arch())
 
 
 def is_mx_scale_preshuffling_avail():

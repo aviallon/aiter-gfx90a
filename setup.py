@@ -216,6 +216,8 @@ def _load_modules_from_config():
 def get_exclude_ops():
     all_modules = _load_modules_from_config()
     exclude_ops = []
+    gpu_archs = os.environ.get("GPU_ARCHS", "native")
+    is_gfx90a_build = "gfx90a" in [g.strip() for g in gpu_archs.split(";")]
 
     # When CK is disabled, exclude all CK-dependent modules
     if not ENABLE_CK:
@@ -223,6 +225,50 @@ def get_exclude_ops():
         return exclude_ops
 
     for module in all_modules:
+        if is_gfx90a_build:
+            gfx90a_exclude_substrings = (
+                "_asm",
+                "fmha_v3",
+                "blockscale",
+                "a4w4",
+                "fp4",
+                "mxfp4",
+                "cktile",
+                "deepgemm",
+                "hk_mla",
+                "mla_",
+                "dsv4",
+            )
+            gfx90a_exclude_modules = {
+                "module_fused_qk_norm_mrope_cache_quant_shuffle",
+                "module_fused_qk_norm_rope_cache_quant_shuffle",
+                "module_fused_qk_rmsnorm_group_quant",
+                "module_gated_rmsnorm_quant",
+                "module_hipbsolgemm",
+                "module_custom",
+                "module_custom_all_reduce",
+                "module_mha_batch_prefill",
+                "module_moe_sorting",
+                "module_moe_topk",
+                "module_norm",
+                "module_rmsnorm",
+                "module_smoothquant",
+                "module_pa",
+                "module_pa_metadata",
+                "module_pa_ragged",
+                "module_pa_v1",
+                "module_ps_metadata",
+                "module_quick_all_reduce",
+                "module_quant",
+                "module_rmsnorm_quant",
+                "module_top_k_per_row",
+            }
+            if module in gfx90a_exclude_modules or any(
+                marker in module for marker in gfx90a_exclude_substrings
+            ):
+                exclude_ops.append(module)
+                continue
+
         if PREBUILD_KERNELS == 1:
             # Exclude tune modules; for MHA keep only fmha_v3 fwd variants
             if "_tune" in module:
@@ -335,6 +381,11 @@ if PREBUILD_KERNELS != 0:
             flags_hip = list(one_opt_args["flags_extra_hip"]) + [
                 f"-DPREBUILD_KERNELS={PREBUILD_KERNELS}"
             ]
+            if "gfx90a" in [
+                g.strip() for g in os.environ.get("GPU_ARCHS", "native").split(";")
+            ]:
+                flags_cc.append("-DAITER_GFX90A_BUILD=1")
+                flags_hip.append("-DAITER_GFX90A_BUILD=1")
 
             core.build_module(
                 md_name=one_opt_args["md_name"],
@@ -351,7 +402,8 @@ if PREBUILD_KERNELS != 0:
                 third_party=one_opt_args["third_party"],
             )
 
-        prebuid_thread_num = 5
+        prebuid_thread_num = int(os.environ.get("AITER_PREBUILD_MODULE_WORKERS", "5"))
+        prebuid_thread_num = max(prebuid_thread_num, 1)
         max_jobs = os.environ.get("MAX_JOBS")
         if max_jobs is not None and max_jobs.isdigit() and int(max_jobs) > 0:
             prebuid_thread_num = min(prebuid_thread_num, int(max_jobs))

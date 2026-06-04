@@ -214,8 +214,11 @@ template torch::Tensor
                     )
                 ).write_text(INSTANCE_abF8)
         else:
+            ab_dtypes = ["I8", "F8"]
+            if os.environ.get("GPU_ARCHS") == "gfx90a":
+                ab_dtypes = ["I8"]
             for EDtype in ["B16", "F16"]:
-                for ABDtype in ["I8", "F8"]:
+                for ABDtype in ab_dtypes:
                     for DDtype in ["F32", EDtype]:
                         intsance = INSTANCE_template.format(
                             name=k.name, dtypes=f"{ABDtype}, {DDtype}, {EDtype}"

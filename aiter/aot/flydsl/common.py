@@ -50,6 +50,7 @@ class JobLabel:
 
 
 _CU_NUM_TO_ARCH = {
+    104: "gfx90a",
     80: "gfx942",
     304: "gfx942",
     256: "gfx950",
@@ -58,7 +59,69 @@ _CU_NUM_TO_ARCH = {
 
 def cu_num_to_arch(cu_num: int, default: str = "gfx950") -> str:
     """Map compute-unit count to GPU architecture string."""
-    return _CU_NUM_TO_ARCH.get(cu_num, default)
+    arch = _CU_NUM_TO_ARCH.get(cu_num)
+    if arch is not None:
+        return arch
+
+    explicit_archs = _explicit_gpu_archs()
+    if len(explicit_archs) == 1:
+        return explicit_archs[0]
+
+    return default
+
+
+def _explicit_gpu_archs() -> list[str]:
+    gfx_env = os.environ.get("GPU_ARCHS")
+    if not gfx_env or gfx_env.strip().lower() == "native":
+        return []
+    return [g.strip() for g in gfx_env.split(";") if g.strip()]
+
+
+def _explicit_build_targets() -> list[tuple[str, int]]:
+    explicit_archs = _explicit_gpu_archs()
+    if not explicit_archs:
+        return []
+
+    from aiter.jit.utils.build_targets import GFX_CU_NUM_MAP
+
+    cu_override = os.environ.get("CU_NUM")
+    targets = []
+    for arch in explicit_archs:
+        if arch in GFX_CU_NUM_MAP:
+            targets.append((arch, int(cu_override or GFX_CU_NUM_MAP[arch])))
+    return targets
+
+
+def filter_jobs_for_build_targets(
+    jobs: list[tuple[OpKind, dict[str, Any]]],
+) -> list[tuple[OpKind, dict[str, Any]]]:
+    """Keep AOT jobs matching explicit GPU_ARCHS/CU_NUM build targets.
+
+    Tuned CSVs contain rows for multiple architectures.  Without this filter,
+    a gfx90a build can spend time AOT-compiling gfx942/gfx950 FlyDSL kernels.
+    """
+    targets = _explicit_build_targets()
+    if not targets:
+        return jobs
+
+    archs = {arch for arch, _ in targets}
+    cu_nums = {cu_num for _, cu_num in targets}
+    filtered: list[tuple[OpKind, dict[str, Any]]] = []
+    for kind, job in jobs:
+        job_arch = str(job.get("gfx") or job.get("arch") or "").strip()
+        if job_arch and job_arch not in archs:
+            continue
+
+        try:
+            job_cu_num = int(job.get("cu_num") or 0)
+        except (TypeError, ValueError):
+            job_cu_num = 0
+        if not job_arch and job_cu_num and job_cu_num not in cu_nums:
+            continue
+
+        filtered.append((kind, job))
+
+    return filtered
 
 
 def job_identity(job: dict[str, Any]) -> tuple:
@@ -205,9 +268,14 @@ def start_aot(
     for kind in OpKind:
         for job in _collect_aot_jobs_for(kind):
             all_jobs.append((kind, job))
+    unfiltered_count = len(all_jobs)
+    all_jobs = filter_jobs_for_build_targets(all_jobs)
 
     if not all_jobs:
-        print("[aiter] FlyDSL AOT: no kernels to compile, skipping")
+        print(
+            f"[aiter] FlyDSL AOT: no kernels to compile for current build target "
+            f"(filtered {unfiltered_count} candidates), skipping"
+        )
         return None, {}
 
     max_workers = min(max_workers, len(all_jobs))

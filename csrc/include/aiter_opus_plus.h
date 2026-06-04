@@ -33,12 +33,22 @@ template <typename S, std::enable_if_t<std::is_same_v<S, fp32x2_t>, bool> = true
 OPUS_D decltype(auto) fp32_to_fp8_scaled_x2(const S& s, float inverted_scale)
 {
     fp32x2_t tmp = pk_mul_f32(s, fp32x2_t{inverted_scale, inverted_scale});
-#if defined(__gfx942__)
+#if defined(__gfx90a__) || defined(__gfx942__)
     constexpr float hi = 240.0f, lo = -240.0f;
 #else
     constexpr float hi = 448.0f, lo = -448.0f;
 #endif
     float a = tmp[0], b = tmp[1];
+#if defined(__gfx90a__)
+    a = a > hi ? hi : (a < lo ? lo : a);
+    b = b > hi ? hi : (b < lo ? lo : b);
+    auto lo_byte = hip_fp8_impl::to_float8<4, 3, float, true /*negative_zero_nan*/, true /*clip*/>(a);
+    auto hi_byte = hip_fp8_impl::to_float8<4, 3, float, true /*negative_zero_nan*/, true /*clip*/>(b);
+    return fp8x2_t{
+        __builtin_bit_cast(fp8_t, static_cast<signed char>(lo_byte)),
+        __builtin_bit_cast(fp8_t, static_cast<signed char>(hi_byte)),
+    };
+#else
     int w;
     asm volatile("v_med3_f32 %1, %1, %3, %4\n"
                  "v_med3_f32 %2, %2, %3, %4\n"
@@ -46,6 +56,7 @@ OPUS_D decltype(auto) fp32_to_fp8_scaled_x2(const S& s, float inverted_scale)
                  : "=v"(w), "+v"(a), "+v"(b)
                  : "v"(lo), "v"(hi));
     return __builtin_bit_cast(fp8x2_t, static_cast<int16_t>(w));
+#endif
 }
 
 template <typename S, std::enable_if_t<std::is_same_v<S, fp32x4_t>, bool> = true>
