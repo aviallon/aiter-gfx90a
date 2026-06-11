@@ -1233,24 +1233,54 @@ template<> struct finfo<e8m0_t> {
 #pragma clang diagnostic ignored "-Wc++20-extensions"
 template<typename S, index_t sel = 0, std::enable_if_t<std::is_same_v<S, fp32x2_t>, bool> = true>
 OPUS_D constexpr decltype(auto) fp32_to_fp8_packed_x2(const S& s, number<sel> = {}) {
+#if defined(__gfx90a__)
+    auto b0 = hip_fp8_impl::to_float8<4, 3, float, true /*negative_zero_nan*/, true /*clip*/>(s[0]);
+    auto b1 = hip_fp8_impl::to_float8<4, 3, float, true /*negative_zero_nan*/, true /*clip*/>(s[1]);
+    return fp8x2_t{__builtin_bit_cast(fp8_t, static_cast<signed char>(b0)),
+                   __builtin_bit_cast(fp8_t, static_cast<signed char>(b1))};
+#else
     int w ; w = __builtin_amdgcn_cvt_pk_fp8_f32(s[0], s[1], w, sel);
     return __builtin_bit_cast(fp8x2_t, static_cast<short>(w));
+#endif
 }
 template<typename S, std::enable_if_t<std::is_same_v<S, fp32x4_t>, bool> = true>
 OPUS_D constexpr decltype(auto) fp32_to_fp8_packed_x4(const S& s) {
+#if defined(__gfx90a__)
+    auto b0 = hip_fp8_impl::to_float8<4, 3, float, true /*negative_zero_nan*/, true /*clip*/>(s[0]);
+    auto b1 = hip_fp8_impl::to_float8<4, 3, float, true /*negative_zero_nan*/, true /*clip*/>(s[1]);
+    auto b2 = hip_fp8_impl::to_float8<4, 3, float, true /*negative_zero_nan*/, true /*clip*/>(s[2]);
+    auto b3 = hip_fp8_impl::to_float8<4, 3, float, true /*negative_zero_nan*/, true /*clip*/>(s[3]);
+    return fp8x4_t{__builtin_bit_cast(fp8_t, static_cast<signed char>(b0)),
+                   __builtin_bit_cast(fp8_t, static_cast<signed char>(b1)),
+                   __builtin_bit_cast(fp8_t, static_cast<signed char>(b2)),
+                   __builtin_bit_cast(fp8_t, static_cast<signed char>(b3))};
+#else
     int w ; w = __builtin_amdgcn_cvt_pk_fp8_f32(s[0], s[1], w, 0); w = __builtin_amdgcn_cvt_pk_fp8_f32(s[2], s[3], w, 1);
     return __builtin_bit_cast(fp8x4_t, w);
+#endif
 }
 template<typename S, index_t sel = 0, std::enable_if_t<std::is_same_v<S, fp8x2_t>, bool> = true>
 OPUS_D constexpr decltype(auto) fp8_to_fp32_packed_x2(const S& s, number<sel> = {}) {
+#if defined(__gfx90a__)
+    return fp32x2_t{hip_fp8_impl::from_float8<4, 3, float, true /*negative_zero_nan*/>(__builtin_bit_cast(unsigned char, s[0])),
+                    hip_fp8_impl::from_float8<4, 3, float, true /*negative_zero_nan*/>(__builtin_bit_cast(unsigned char, s[1]))};
+#else
     union { int bitwise; S f8_packs[2]; } value; value.f8_packs[0] = s;
     return __builtin_amdgcn_cvt_pk_f32_fp8(value.bitwise, sel);
+#endif
 }
 template<typename S, std::enable_if_t<std::is_same_v<S, fp8x4_t>, bool> = true>
 OPUS_D constexpr decltype(auto) fp8_to_fp32_packed_x4(const S& s) {
+#if defined(__gfx90a__)
+    return fp32x4_t{hip_fp8_impl::from_float8<4, 3, float, true /*negative_zero_nan*/>(__builtin_bit_cast(unsigned char, s[0])),
+                    hip_fp8_impl::from_float8<4, 3, float, true /*negative_zero_nan*/>(__builtin_bit_cast(unsigned char, s[1])),
+                    hip_fp8_impl::from_float8<4, 3, float, true /*negative_zero_nan*/>(__builtin_bit_cast(unsigned char, s[2])),
+                    hip_fp8_impl::from_float8<4, 3, float, true /*negative_zero_nan*/>(__builtin_bit_cast(unsigned char, s[3]))};
+#else
     int bitwise = __builtin_bit_cast(int, s);
     auto x = __builtin_amdgcn_cvt_pk_f32_fp8(bitwise, 0); auto y = __builtin_amdgcn_cvt_pk_f32_fp8(bitwise, 1);
     return fp32x4_t{x[0], x[1], y[0], y[1]};
+#endif
 }
 
 namespace impl {
