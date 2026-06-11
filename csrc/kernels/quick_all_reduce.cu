@@ -100,16 +100,22 @@ int64_t qr_max_size() {
 INSTANTIATE_FOR_WORLDSIZE(__hip_bfloat16, CodecFP, false)
 INSTANTIATE_FOR_WORLDSIZE(__hip_bfloat16, CodecQ4, false)
 INSTANTIATE_FOR_WORLDSIZE(__hip_bfloat16, CodecQ6, false)
+#if !defined(__gfx90a__)
 INSTANTIATE_FOR_WORLDSIZE(__hip_bfloat16, CodecFP8, false)
+#endif
 INSTANTIATE_FOR_WORLDSIZE(__hip_bfloat16, CodecFP, true)
 INSTANTIATE_FOR_WORLDSIZE(__hip_bfloat16, CodecQ4, true)
 INSTANTIATE_FOR_WORLDSIZE(__hip_bfloat16, CodecQ6, true)
+#if !defined(__gfx90a__)
 INSTANTIATE_FOR_WORLDSIZE(__hip_bfloat16, CodecFP8, true)
+#endif
 
 INSTANTIATE_FOR_WORLDSIZE(half, CodecFP, false)
 INSTANTIATE_FOR_WORLDSIZE(half, CodecQ4, false)
 INSTANTIATE_FOR_WORLDSIZE(half, CodecQ6, false)
+#if !defined(__gfx90a__)
 INSTANTIATE_FOR_WORLDSIZE(half, CodecFP8, false)
+#endif
 
 #endif  // USE_ROCM
 } // namespace aiter

@@ -396,6 +396,8 @@ struct CodecQ6 : public CodecBase
 // We quantize the FP16 data to block-scaled Fp8 in blocks of 4 *
 // kThreadGroupSize.
 template <typename T, int world_size>
+// gfx90a (CDNA2) has no fp8-conversion-insts; fall back to INT6/INT4/FP.
+#if !defined(__gfx90a__)
 struct CodecFP8 : public CodecBase
 {
     static int constexpr kWorldSize = world_size;
@@ -576,6 +578,8 @@ struct CodecFP8 : public CodecBase
         }
     }
 };
+
+#endif // !defined(__gfx90a__)
 
 // Twoshot All Reduce
 template <typename T, class Codec, bool cast_bf2half>
@@ -980,7 +984,11 @@ struct DeviceComms
         auto quant_level_   = static_cast<QuickReduceQuantLevel>(quant_level);
         switch(quant_level_)
         {
-        case QuickReduceQuantLevel::FP8: TWOSHOT_DISPATCH(CodecFP8) break;
+        case QuickReduceQuantLevel::FP8:
+#if !defined(__gfx90a__)
+            TWOSHOT_DISPATCH(CodecFP8)
+#endif
+            break;
         case QuickReduceQuantLevel::INT6: TWOSHOT_DISPATCH(CodecQ6) break;
         case QuickReduceQuantLevel::INT4: TWOSHOT_DISPATCH(CodecQ4) break;
         default: TWOSHOT_DISPATCH(CodecFP) break;

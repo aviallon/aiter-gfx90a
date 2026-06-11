@@ -101,7 +101,10 @@ buffer_store_dwordx4(int32x4_t data,
 
 __quickreduce_device_inline__ static void set_fp16_ovfl(bool const value)
 {
-#if defined(__gfx942__)
+#if defined(__gfx942__) || defined(__gfx90a__)
+    // gfx90a (CDNA2) also supports the fp16-overflow MODE bit (hwreg 0xdc1).
+    // Without it, bf16->fp16 casts of values >65504 become +/-inf and corrupt
+    // the packed-fp16 reductions. The s_setreg is valid on CDNA2.
     if(value)
     {
         asm volatile("s_setreg_imm32_b32 0xdc1, 1;" ::);
@@ -352,12 +355,21 @@ __quickreduce_device_inline__ int group_abs_max(int32x4_t atom)
 
 __quickreduce_device_inline__ void set_sync_flag(uint32_t* flag_ptr, uint32_t flag)
 {
+    // Coarse-grained PCIe P2P buffers are not guaranteed to flush
+    // peer-written data before the flag without a system-scope fence.
+    // A __threadfence_system() ensures prior non-temporal / mubuf
+    // stores are visible to all devices before the flag is raised.
+#if defined(__gfx942__) || defined(__gfx90a__)
+    __threadfence_system();
+#endif
     __atomic_store_n(flag_ptr, flag, __ATOMIC_RELEASE);
 }
 
 __quickreduce_device_inline__ void wait_sync_flag(uint32_t* flag_ptr, uint32_t flag)
 {
-    while(__atomic_load_n(flag_ptr, __ATOMIC_RELAXED) != flag) {}
+    // __ATOMIC_ACQUIRE pairs with the RELEASE store above so the
+    // consumer sees the producer's data writes once the flag is set.
+    while(__atomic_load_n(flag_ptr, __ATOMIC_ACQUIRE) != flag) {}
 }
 
 } // namespace aiter
