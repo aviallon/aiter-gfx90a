@@ -395,9 +395,9 @@ struct CodecQ6 : public CodecBase
 // Fp8 symmetric quantization codec.
 // We quantize the FP16 data to block-scaled Fp8 in blocks of 4 *
 // kThreadGroupSize.
-template <typename T, int world_size>
 // gfx90a (CDNA2) has no fp8-conversion-insts; fall back to INT6/INT4/FP.
 #if !defined(__gfx90a__)
+template <typename T, int world_size>
 struct CodecFP8 : public CodecBase
 {
     static int constexpr kWorldSize = world_size;
